@@ -3,6 +3,9 @@ import pandas as pd
 from data_retrieval import DataRetrieval
 from data_visualization import DataVisualization
 
+st.title("My Streamlit App")
+st.write("Hello, world!")
+
 
 class Dashboard:
     def __init__(self, excel_file_path):
