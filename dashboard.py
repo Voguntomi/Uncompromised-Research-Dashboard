@@ -3,11 +3,13 @@ import pandas as pd
 from data_retrieval import DataRetrieval
 from data_visualization import DataVisualization
 
-# Set the title of the Streamlit app
-st.title("My Streamlit App")
-st.write("Hello, world!")
+# Set page config at the start of the script
+st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
 
 class Dashboard:
+    def run(self):
+        # All other Streamlit code follows after setting the page config
+        st.title("Uncompromised Research Dashboard")
     def __init__(self, excel_file_path):
         self.data_retrieval = DataRetrieval(excel_file_path)
         self.raw_data = self.data_retrieval.load_raw_data()
