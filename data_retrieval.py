@@ -1,36 +1,40 @@
 import pandas as pd
 from ecbdata import ecbdata
+import requests
+import pandas as pd
+import io
 
 
 class DataRetrieval:
-    def __init__(self, excel_file_path):
-        """
-        Initialize the DataRetrieval class with the Excel file path.
-        """
-        self.DICT_data = {}  # Dictionary to store retrieved data
-        self.key_name_mapping = {}  # Mapping of dataset keys to names
-        self.raw_data = None  # Raw data loaded from the Excel file
-        self.excel_file_path = excel_file_path  # Path to the Excel file
+    def __init__(self, excel_file_url):
+        self.excel_file_url = excel_file_url
+        self.raw_data = self.load_raw_data()
+        self.DICT_data = self.create_dict_data()  # Create DICT_data as a dictionary
 
     def load_raw_data(self):
-        """
-        Load the raw data from the Excel file and clean it.
-        """
-        print("\nLoading raw data from the Excel file...")
-        self.raw_data = pd.read_excel(self.excel_file_path, sheet_name="Sheet1", header=0)
+        # Download the Excel file from the GitHub URL
+        response = requests.get(self.excel_file_url)
 
-        # Define column names for the dataset
-        self.raw_data.columns = [
-            "Name", "Key", "Frequency", "Reference area", "Adjustment indicator",
-            "Indicators for business statistics", "Activity classification",
-            "Prices", "Stocks, Transactions, Other Flows", "Unit of measure",
-            "LFS Indicator", "LFS Breakdown", "Age breakdown", "Gender", "Series Variation"
-        ]
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Use io.BytesIO to treat the downloaded content as a file-like object
+            excel_data = io.BytesIO(response.content)
 
-        # Drop rows where "Name" or "Key" is empty
-        self.raw_data = self.raw_data.dropna(subset=["Name", "Key"]).reset_index(drop=True)
-        print("Raw data loaded and cleaned successfully.")
-        return self.raw_data
+            # Read the Excel data into a pandas DataFrame
+            return pd.read_excel(excel_data, sheet_name="Sheet1", header=0)
+        else:
+            # If the request fails, raise an error
+            raise FileNotFoundError(f"Failed to download the file from {self.excel_file_url}")
+
+    def create_dict_data(self):
+        # Print the columns and first few rows to inspect the data
+        print("Columns in DataFrame:", self.raw_data.columns)
+        print("First few rows of the data:", self.raw_data.head())  # To inspect the data
+
+        # Use 'Key' as the column to set as the index
+        return self.raw_data.set_index('Key').T.to_dict('dict')
+        # Replace 'YourActualColumnName' with the correct column name
+        return self.raw_data.set_index('YourActualColumnName').T.to_dict('dict')
 
     def create_key_name_mapping(self, cleaned_data):
         """

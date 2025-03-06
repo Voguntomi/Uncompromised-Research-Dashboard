@@ -32,19 +32,27 @@ class Dashboard:
         dataset_names = [name for name in self.data_retrieval.key_name_mapping.values() if name]
         selected_name = st.sidebar.selectbox("Select Dataset:", options=dataset_names, key="single_selection")
 
-        view_option = st.sidebar.radio("View Option:", ["Original Data", "Period-on-Period", "Interannual"], key="view_option")
+        view_option = st.sidebar.radio("View Option:", ["Original Data", "Period-on-Period", "Interannual"],
+                                       key="view_option")
 
         # Multi-year quarter comparison
         compare_quarters = st.sidebar.checkbox("Compare Specific Quarters Across Years")
 
+        filtered_data = None  # Initialize filtered_data early to avoid unbound error
+
         if selected_name:
             selected_key = self.data_retrieval.get_key_from_name(selected_name)
+
+            # Ensure that data is fetched if not present
             if selected_key not in self.data_retrieval.DICT_data:
                 self.data_retrieval.fetch_data(selected_key)
 
-            data_df = self.data_retrieval.DICT_data.get(selected_key, pd.DataFrame())
+            # Get data from dictionary
+            data_dict = self.data_retrieval.DICT_data.get(selected_key, None)
 
-            if not data_df.empty:
+            if data_dict:
+                # Convert the dictionary to DataFrame if data is found
+                data_df = pd.DataFrame.from_dict(data_dict, orient='index')
                 frequency = self.auto_detect_frequency(data_df)
 
                 if "TIME_PERIOD" in data_df.columns:
@@ -57,28 +65,45 @@ class Dashboard:
                     filtered_data = data_df[(data_df["TIME_PERIOD"] >= pd.to_datetime(start_date)) &
                                             (data_df["TIME_PERIOD"] <= pd.to_datetime(end_date))]
 
-                if view_option == "Original Data":
-                    chart = self.visualization.line_chart(filtered_data, y_column="OBS_VALUE", title=f"Original Data for {selected_name}")
-                    st.plotly_chart(chart)
-                    st.dataframe(filtered_data)
+                else:
+                    # If TIME_PERIOD is missing, show an error message or handle appropriately
+                    st.write("The dataset does not contain a 'TIME_PERIOD' column.")
 
-                elif view_option == "Period-on-Period":
-                    filtered_data["Variance"] = filtered_data["OBS_VALUE"].pct_change(periods=1) * 100
-                    chart = self.visualization.period_on_period_chart(filtered_data, title=f"Period-on-Period Change for {selected_name}")
-                    st.plotly_chart(chart)
-                    st.dataframe(filtered_data)
+                # Now, proceed with the visualization options
+                if filtered_data is not None and not filtered_data.empty:
+                    if view_option == "Original Data":
+                        chart = self.visualization.line_chart(filtered_data, y_column="OBS_VALUE",
+                                                              title=f"Original Data for {selected_name}")
+                        st.plotly_chart(chart)
+                        st.dataframe(filtered_data)
 
-                elif view_option == "Interannual":
-                    filtered_data["Year"] = filtered_data["TIME_PERIOD"].dt.year
-                    chart = self.visualization.interannual_chart(filtered_data, title=f"Interannual Change for {selected_name}")
-                    st.plotly_chart(chart)
-                    st.dataframe(filtered_data)
+                    elif view_option == "Period-on-Period":
+                        filtered_data["Variance"] = filtered_data["OBS_VALUE"].pct_change(periods=1) * 100
+                        chart = self.visualization.period_on_period_chart(filtered_data,
+                                                                          title=f"Period-on-Period Change for {selected_name}")
+                        st.plotly_chart(chart)
+                        st.dataframe(filtered_data)
 
-                if compare_quarters:
-                    selected_quarters = st.sidebar.multiselect("Select Quarters:", ["Q1", "Q2", "Q3", "Q4"], key="quarter_selection")
-                    if selected_quarters:
-                        quarter_chart = self.visualization.quarterly_comparison_chart(filtered_data, selected_quarters)
-                        st.plotly_chart(quarter_chart)
+                    elif view_option == "Interannual":
+                        filtered_data["Year"] = filtered_data["TIME_PERIOD"].dt.year
+                        chart = self.visualization.interannual_chart(filtered_data,
+                                                                     title=f"Interannual Change for {selected_name}")
+                        st.plotly_chart(chart)
+                        st.dataframe(filtered_data)
+
+                    if compare_quarters:
+                        selected_quarters = st.sidebar.multiselect("Select Quarters:", ["Q1", "Q2", "Q3", "Q4"],
+                                                                   key="quarter_selection")
+                        if selected_quarters:
+                            quarter_chart = self.visualization.quarterly_comparison_chart(filtered_data,
+                                                                                          selected_quarters)
+                            st.plotly_chart(quarter_chart)
+                else:
+                    st.write("No valid data available for the selected dataset.")
+            else:
+                st.write("No data available for the selected dataset.")
+        else:
+            st.write("Please select a dataset.")
 
 
 if __name__ == "__main__":
