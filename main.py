@@ -1,4 +1,6 @@
 # main.py
+import streamlit as st
+st.write("🚀 App is running!")
 from data_retrieval import DataRetrieval
 from data_manipulation import DataManipulation
 from data_visualization import DataVisualization
