@@ -82,7 +82,8 @@ class Dashboard:
 
 
 if __name__ == "__main__":
-    excel_file_path = "C:/Users/vogun/Downloads/DATA FOR ECB.xlsx"
+    st.write("🚀 App started!")
+    excel_file_path = "https://github.com/Voguntomi/Uncompromised-Research-Dashboard/raw/main/DATA%20FOR%20ECB.xlsx"
     dashboard = Dashboard(excel_file_path)
     dashboard.run()
 
