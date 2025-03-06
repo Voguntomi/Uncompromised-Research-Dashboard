@@ -5,7 +5,7 @@ from data_visualization import DataVisualization
 
 class ECBDataProcessor:
     def __init__(self):
-        # Initializing the data retrieval, manipulation, and visualization classes
+        # Initializing the data retrieval, manipulation, and visualization classess
         self.data_retrieval = DataRetrieval()
         self.data_manipulation = None
         self.data_visualization = None
