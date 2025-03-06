@@ -39,54 +39,60 @@ class Dashboard:
         compare_quarters = st.sidebar.checkbox("Compare Specific Quarters Across Years")
 
         if selected_name:
-            selected_key = self.data_retrieval.get_key_from_name(selected_name)
-            if selected_key not in self.data_retrieval.DICT_data:
-                self.data_retrieval.fetch_data(selected_key)
+            selected_keys = self.data_retrieval.get_key_from_name(selected_name)  # This returns a list of keys
 
-            # Get data associated with the selected key
-            data_df = self.data_retrieval.DICT_data.get(selected_key, None)
+            # Ensure that there is exactly one key, or handle multiple keys
+            if selected_keys:
+                selected_key = selected_keys[0]  # Take the first key in the list
+                if selected_key not in self.data_retrieval.DICT_data:
+                    self.data_retrieval.fetch_data(selected_key)
 
-            # Ensure data_df is a DataFrame and not empty
-            if isinstance(data_df, pd.DataFrame) and not data_df.empty:
-                frequency = self.auto_detect_frequency(data_df)
+                # Get data associated with the selected key
+                data_df = self.data_retrieval.DICT_data.get(selected_key, None)
 
-                if "TIME_PERIOD" in data_df.columns:
-                    data_df["TIME_PERIOD"] = pd.to_datetime(data_df["TIME_PERIOD"])
-                    min_date, max_date = data_df["TIME_PERIOD"].min(), data_df["TIME_PERIOD"].max()
+                # Ensure data_df is a DataFrame and not empty
+                if isinstance(data_df, pd.DataFrame) and not data_df.empty:
+                    frequency = self.auto_detect_frequency(data_df)
 
-                    start_date = st.sidebar.date_input("Start Date", min_date, key="start_date")
-                    end_date = st.sidebar.date_input("End Date", max_date, key="end_date")
+                    if "TIME_PERIOD" in data_df.columns:
+                        data_df["TIME_PERIOD"] = pd.to_datetime(data_df["TIME_PERIOD"])
+                        min_date, max_date = data_df["TIME_PERIOD"].min(), data_df["TIME_PERIOD"].max()
 
-                    # Filter data based on date range
-                    filtered_data = data_df[(data_df["TIME_PERIOD"] >= pd.to_datetime(start_date)) &
-                                            (data_df["TIME_PERIOD"] <= pd.to_datetime(end_date))]
+                        start_date = st.sidebar.date_input("Start Date", min_date, key="start_date")
+                        end_date = st.sidebar.date_input("End Date", max_date, key="end_date")
 
-                if view_option == "Original Data":
-                    chart = self.visualization.line_chart(filtered_data, y_column="OBS_VALUE", title=f"Original Data for {selected_name}")
-                    st.plotly_chart(chart)
-                    st.dataframe(filtered_data)
+                        # Filter data based on date range
+                        filtered_data = data_df[(data_df["TIME_PERIOD"] >= pd.to_datetime(start_date)) &
+                                                (data_df["TIME_PERIOD"] <= pd.to_datetime(end_date))]
 
-                elif view_option == "Period-on-Period":
-                    filtered_data["Variance"] = filtered_data["OBS_VALUE"].pct_change(periods=1) * 100
-                    chart = self.visualization.period_on_period_chart(filtered_data, title=f"Period-on-Period Change for {selected_name}")
-                    st.plotly_chart(chart)
-                    st.dataframe(filtered_data)
+                    if view_option == "Original Data":
+                        chart = self.visualization.line_chart(filtered_data, y_column="OBS_VALUE", title=f"Original Data for {selected_name}")
+                        st.plotly_chart(chart)
+                        st.dataframe(filtered_data)
 
-                elif view_option == "Interannual":
-                    filtered_data["Year"] = filtered_data["TIME_PERIOD"].dt.year
-                    chart = self.visualization.interannual_chart(filtered_data, title=f"Interannual Change for {selected_name}")
-                    st.plotly_chart(chart)
-                    st.dataframe(filtered_data)
+                    elif view_option == "Period-on-Period":
+                        filtered_data["Variance"] = filtered_data["OBS_VALUE"].pct_change(periods=1) * 100
+                        chart = self.visualization.period_on_period_chart(filtered_data, title=f"Period-on-Period Change for {selected_name}")
+                        st.plotly_chart(chart)
+                        st.dataframe(filtered_data)
 
-                # Quarter comparison chart
-                if compare_quarters:
-                    selected_quarters = st.sidebar.multiselect("Select Quarters:", ["Q1", "Q2", "Q3", "Q4"], key="quarter_selection")
-                    if selected_quarters:
-                        quarter_chart = self.visualization.quarterly_comparison_chart(filtered_data, selected_quarters)
-                        st.plotly_chart(quarter_chart)
+                    elif view_option == "Interannual":
+                        filtered_data["Year"] = filtered_data["TIME_PERIOD"].dt.year
+                        chart = self.visualization.interannual_chart(filtered_data, title=f"Interannual Change for {selected_name}")
+                        st.plotly_chart(chart)
+                        st.dataframe(filtered_data)
+
+                    # Quarter comparison chart
+                    if compare_quarters:
+                        selected_quarters = st.sidebar.multiselect("Select Quarters:", ["Q1", "Q2", "Q3", "Q4"], key="quarter_selection")
+                        if selected_quarters:
+                            quarter_chart = self.visualization.quarterly_comparison_chart(filtered_data, selected_quarters)
+                            st.plotly_chart(quarter_chart)
+                else:
+                    # Handle case where data is not available or empty
+                    st.error(f"Data for {selected_name} is not available.")
             else:
-                # Handle case where data is not available or empty
-                st.error(f"Data for {selected_name} is not available.")
+                st.error(f"No key found for the selected name: {selected_name}")
 
 if __name__ == "__main__":
     st.write("🚀 App started!")
