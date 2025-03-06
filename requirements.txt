@@ -5,6 +5,3 @@ scipy
 plotly
 ecbdata
 openpyxl
-data_retrieval
-data_visualization
-data_manipulation
