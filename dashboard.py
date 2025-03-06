@@ -3,13 +3,10 @@ import pandas as pd
 from data_retrieval import DataRetrieval
 from data_visualization import DataVisualization
 
-# Set page config at the start of the script
+# Set page config at the top of the script (must be the first command)
 st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
 
 class Dashboard:
-    def run(self):
-        # All other Streamlit code follows after setting the page config
-        st.title("Uncompromised Research Dashboard")
     def __init__(self, excel_file_path):
         self.data_retrieval = DataRetrieval(excel_file_path)
         self.raw_data = self.data_retrieval.load_raw_data()
@@ -28,7 +25,7 @@ class Dashboard:
         return None
 
     def run(self):
-        st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
+        st.title("Uncompromised Research Dashboard")
         st.markdown("<h1 style='text-align: center;'>📊 Uncompromised Research Dashboard</h1>", unsafe_allow_html=True)
 
         # Generate dataset names from key-name mapping
@@ -96,5 +93,3 @@ if __name__ == "__main__":
     excel_file_path = "https://github.com/Voguntomi/Uncompromised-Research-Dashboard/raw/main/DATA%20FOR%20ECB.xlsx"
     dashboard = Dashboard(excel_file_path)
     dashboard.run()
-
-
