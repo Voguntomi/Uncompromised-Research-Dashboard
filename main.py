@@ -1,13 +1,11 @@
 # main.py
-import streamlit as st
-st.write("🚀 App is running!")
 from data_retrieval import DataRetrieval
 from data_manipulation import DataManipulation
 from data_visualization import DataVisualization
 
 class ECBDataProcessor:
     def __init__(self):
-        # Initializing the data retrieval, manipulation, and visualization classess
+        # Initializing the data retrieval, manipulation, and visualization classes
         self.data_retrieval = DataRetrieval()
         self.data_manipulation = None
         self.data_visualization = None

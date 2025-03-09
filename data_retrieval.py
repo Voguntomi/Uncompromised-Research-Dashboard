@@ -1,34 +1,34 @@
 import pandas as pd
-
+import os
 
 class DataRetrieval:
-    def __init__(self, excel_file_path):
-        self.excel_file_path = excel_file_path
-        self.raw_data = self.load_raw_data()  # Load raw data on initialization
-        self.DICT_data = {}
+    def __init__(self, pickle_file_path):
+        self.pickle_file_path = pickle_file_path
+        self.raw_data = None
         self.key_name_mapping = {}
 
-    def load_raw_data(self):
-        """ Load data from the Excel file """
+        # Load Pickle if available
+        if os.path.exists(self.pickle_file_path):
+            self.raw_data = self.load_data_from_pickle()
+        else:
+            print(f"Pickle file {self.pickle_file_path} does not exist.")
+            self.raw_data = None
+
+        if self.raw_data is not None:
+            self.create_key_name_mapping(self.raw_data)  # Pass the raw_data DataFrame
+
+    def load_data_from_pickle(self):
+        """Load data from Pickle file"""
         try:
-            # Read the Excel file
-            raw_data = pd.read_excel(self.excel_file_path)
-
-            # Check if the dataframe is empty
-            if raw_data.empty:
-                raise ValueError("The loaded data is empty.")
-
-            # Print the first few rows and column names for debugging
-            print("Columns in DataFrame:", raw_data.columns)
-            print("First few rows of the data:", raw_data.head())
-
-            return raw_data
-
+            df = pd.read_pickle(self.pickle_file_path)
+            print("Data loaded successfully from Pickle.")
+            return df
         except Exception as e:
-            raise ValueError(f"Error loading data: {e}")
+            print(f"Error loading Pickle file: {e}")
+            return None
 
     def create_key_name_mapping(self, df):
-        """ Create key-name mapping by ensuring there are no missing values in 'Key' and 'Name' columns """
+        """Create key-name mapping by ensuring there are no missing values in 'Key' and 'Name' columns"""
         # Check if 'Key' and 'Name' columns exist in the DataFrame
         if 'Key' not in df.columns or 'Name' not in df.columns:
             raise ValueError("The required 'Key' and 'Name' columns are not present in the data.")
@@ -59,21 +59,3 @@ class DataRetrieval:
         # Create key-name mapping
         self.key_name_mapping = dict(zip(df['Key'], df['Name']))
         print("Key-Name mapping created successfully.")
-
-    def get_key_from_name(self, name):
-        """ Fetch the key from name using the key_name_mapping. """
-        matching_keys = [key for key, value in self.key_name_mapping.items() if value == name]
-        return matching_keys if matching_keys else None
-
-    def fetch_data(self, key):
-        """ Fetch the data for a given key from the DICT_data.
-        If the data is not found, attempt to load it.
-        """
-        if key in self.DICT_data:
-            return self.DICT_data[key]
-        else:
-            # Logic to fetch data for the key (you can load from file, API, etc.)
-            print(f"Data for key '{key}' not found. Attempting to fetch data...")
-            # Placeholder: logic to load data
-            # self.DICT_data[key] = some_function_to_fetch_data(key)
-            return pd.DataFrame()  # Returning an empty DataFrame as a fallback

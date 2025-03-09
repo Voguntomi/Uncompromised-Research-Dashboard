@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from data import DataRetrieval
+from data_retrieval import DataRetrieval
 from data_manipulation import DataManipulation
 from data_visualization import DataVisualization
 
