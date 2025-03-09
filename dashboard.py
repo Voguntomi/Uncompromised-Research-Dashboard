@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from data import load_data_from_pickle, process_data, auto_detect_frequency
+from data import DataHandler  # Import the class
 from data_visualization import DataVisualization
 
 # Set page config at the top of the script (must be the first command)
@@ -8,25 +8,22 @@ st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
 
 
 class Dashboard:
-    def __init__(self, pickle_file_path):
-        # Initialize DataRetrieval using the Pickle file
-        self.df = load_data_from_pickle(pickle_file_path)  # Load data from the Pickle file
-        self.df = process_data(self.df)  # Process the data (e.g., handle missing values)
+    def __init__(self, excel_file_path, pickle_file_path):
+        # Initialize DataHandler
+        self.data_handler = DataHandler(excel_file_path, pickle_file_path)
+        self.df = self.data_handler.raw_data  # Load data
+
+        if self.df is None:
+            st.error("Failed to load data.")
+            return
+
         self.visualization = DataVisualization(self.df)  # Initialize visualization
 
     def auto_detect_frequency(self, df):
         """Detect the dataset's frequency based on time gaps."""
-        if "TIME_PERIOD" in df.columns:
-            df["TIME_PERIOD"] = pd.to_datetime(df["TIME_PERIOD"])
-            time_diff = df["TIME_PERIOD"].diff().mode()[0]
-            if time_diff.days in [90, 91, 92]:  # Quarterly
-                return "quarterly"
-            elif time_diff.days in [30, 31]:  # Monthly
-                return "monthly"
-        return None
+        return self.data_handler.auto_detect_frequency()  # Use the method from DataHandler
 
     def run(self):
-        st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
         st.markdown("<h1 style='text-align: center;'>📊 Uncompromised Research Dashboard</h1>", unsafe_allow_html=True)
 
         # Select dataset
@@ -39,9 +36,7 @@ class Dashboard:
         compare_quarters = st.sidebar.checkbox("Compare Specific Quarters Across Years")
 
         if selected_name:
-            # Filter the data based on the selected dataset
             selected_data = self.df[self.df['Name'] == selected_name]
-
             if selected_data.empty:
                 st.error(f"No data found for the selected dataset: {selected_name}")
                 return
@@ -96,9 +91,10 @@ class Dashboard:
 if __name__ == "__main__":
     st.write("🚀 App started!")
 
-    # Provide the path to the Pickle file
-    pickle_file_path = r"data_for_ecb.pkl"  # Path to your Pickle file
+    # Define file paths
+    excel_path = "data/DATA_FOR_ECB.xlsx"
+    pickle_path = "data/DATA_FOR_ECB.pkl"
 
-    dashboard = Dashboard(pickle_file_path)
+    dashboard = Dashboard(excel_path, pickle_path)
     dashboard.run()
 
