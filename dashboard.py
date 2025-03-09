@@ -1,35 +1,33 @@
 import streamlit as st
+import pandas as pd
 from data import DataRetrieval
+from data_manipulation import DataManipulation
 from data_visualization import DataVisualization
+
 
 # Set page config at the top of the script (must be the first command)
 st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
 
 
 class Dashboard:
-    def __init__(self, pickle_file_path=None, excel_file_path=None):
+    def __init__(self, pickle_file_path):
         """
-        Initialize the Dashboard class using data retrieval either from Excel or Pickle file.
+        Initialize the Dashboard class with a Pickle file.
         """
-        self.data_retrieval = DataRetrieval(pickle_file_path=pickle_file_path, excel_file_path=excel_file_path)
-        self.df = self.data_retrieval.raw_data  # Loaded data from Excel or Pickle file
+        # Initialize DataRetrieval using the Pickle file
+        self.data_retrieval = DataRetrieval(pickle_file_path=pickle_file_path)
+        self.df = self.data_retrieval.raw_data  # Get the loaded data
         self.df = self.process_data(self.df)  # Process the data (e.g., handle missing values)
         self.visualization = DataVisualization(self.df)  # Initialize visualization
 
     def process_data(self, df):
-        """ Process the data (this is just an example) """
-        if df is not None:
-            print("Missing values in the data:", df.isnull().sum())
-
-            # Avoid inplace=True and explicitly assign the filled column back to the DataFrame
-            df['Name'] = df['Name'].fillna('Unknown')
-
-            print("Updated data:")
-            print(df.head())
+        """Process the data (e.g., handle missing values)."""
+        if df.isnull().any().any():
+            df = df.fillna(method="ffill")  # Forward fill missing values
         return df
 
     def auto_detect_frequency(self, df):
-        """ Detect the dataset's frequency based on time gaps. """
+        """Detect the dataset's frequency based on time gaps."""
         if "TIME_PERIOD" in df.columns:
             df["TIME_PERIOD"] = pd.to_datetime(df["TIME_PERIOD"])
             time_diff = df["TIME_PERIOD"].diff().mode()[0]
@@ -40,7 +38,7 @@ class Dashboard:
         return None
 
     def run(self):
-        st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
+        # Set the title and header of the dashboard
         st.markdown("<h1 style='text-align: center;'>📊 Uncompromised Research Dashboard</h1>", unsafe_allow_html=True)
 
         # Select dataset
@@ -113,5 +111,6 @@ if __name__ == "__main__":
     # Provide the path to the Pickle file
     pickle_file_path = r"data_for_ecb.pkl"  # Path to your Pickle file
 
-    dashboard = Dashboard(pickle_file_path)
-
+    # Initialize and run the dashboard
+    dashboard = Dashboard(pickle_file_path=pickle_file_path)  # Use the pickle file
+    dashboard.run()
