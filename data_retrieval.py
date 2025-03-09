@@ -1,11 +1,18 @@
 import pandas as pd
+import pickle
 import os
+
 
 class DataRetrieval:
     def __init__(self, pickle_file_path):
         self.pickle_file_path = pickle_file_path
-        self.raw_data = None
-        self.key_name_mapping = {}
+
+        # Check if the pickle file exists
+        if os.path.exists(self.pickle_file_path):
+            with open(self.pickle_file_path, 'rb') as file:
+                self.raw_data = pickle.load(file)  # Load the pickle data
+        else:
+            raise FileNotFoundError(f"The pickle file at {self.pickle_file_path} does not exist.")
 
         # Load Pickle if available
         if os.path.exists(self.pickle_file_path):

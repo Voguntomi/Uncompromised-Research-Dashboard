@@ -16,9 +16,9 @@ class Dashboard:
         """
         # Initialize DataRetrieval using the Pickle file
         self.data_retrieval = DataRetrieval(pickle_file_path=pickle_file_path)
-        self.df = self.data_retrieval.raw_data  # Get the loaded data
-        self.df = self.process_data(self.df)  # Process the data (e.g., handle missing values)
-        self.visualization = DataVisualization(self.df)  # Initialize visualization
+        self.df_dict = self.data_retrieval.raw_data  # Get the loaded data
+        self.df_dict = self.process_data(self.df_dict)  # Process the data (e.g., handle missing values)
+        self.visualization = DataVisualization(self.df_dict)  # Initialize visualization
 
     def process_data(self, df):
         """Process the data (e.g., handle missing values)."""
@@ -42,7 +42,7 @@ class Dashboard:
         st.markdown("<h1 style='text-align: center;'>📊 Uncompromised Research Dashboard</h1>", unsafe_allow_html=True)
 
         # Select dataset
-        dataset_names = [name for name in self.df['Name'].unique()]
+        dataset_names = [name for name in self.df_dict['Name'].unique()]
         selected_name = st.sidebar.selectbox("Select Dataset:", options=dataset_names, key="single_selection")
 
         view_option = st.sidebar.radio("View Option:", ["Original Data", "Period-on-Period", "Interannual"], key="view_option")
@@ -52,7 +52,7 @@ class Dashboard:
 
         if selected_name:
             # Filter the data based on the selected dataset
-            selected_data = self.df[self.df['Name'] == selected_name]
+            selected_data = self.df_dict[self.df_dict['Name'] == selected_name]
 
             if selected_data.empty:
                 st.error(f"No data found for the selected dataset: {selected_name}")
@@ -106,11 +106,8 @@ class Dashboard:
 
 # Main execution
 if __name__ == "__main__":
-    st.write("🚀 App started!")
-
-    # Provide the path to the Pickle file
     pickle_file_path = r"data_for_ecb.pkl"  # Path to your Pickle file
 
     # Initialize and run the dashboard
-    dashboard = Dashboard(pickle_file_path=pickle_file_path)  # Use the pickle file
+    dashboard = Dashboard(pickle_file_path=pickle_file_path)  # Pass the pickle file to the constructor
     dashboard.run()
