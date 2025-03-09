@@ -9,7 +9,7 @@ st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
 class Dashboard:
     def __init__(self, excel_file_path):
         self.data_retrieval = DataRetrieval(excel_file_path)
-        self.raw_data = self.data_retrieval.load_raw_data()
+        self.raw_data = self.data_retrieval.load_raw_data_from_local()
         self.data_retrieval.create_key_name_mapping(self.raw_data)
         self.visualization = DataVisualization(self.data_retrieval.DICT_data)
 
@@ -96,6 +96,7 @@ class Dashboard:
 
 if __name__ == "__main__":
     st.write("🚀 App started!")
-    excel_file_path = "https://github.com/Voguntomi/Uncompromised-Research-Dashboard/raw/main/DATA%20FOR%20ECB.xlsx"
+    # Provide the local file path to the embedded Excel file
+    excel_file_path = "data/DATA_FOR_ECB.xlsx"  # Update this to the actual path of the file in your repository
     dashboard = Dashboard(excel_file_path)
     dashboard.run()
