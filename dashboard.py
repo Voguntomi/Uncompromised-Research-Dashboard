@@ -1,6 +1,5 @@
 import streamlit as st
-import pandas as pd
-from data import DataHandler  # Import the class
+from data import DataRetrieval
 from data_visualization import DataVisualization
 
 # Set page config at the top of the script (must be the first command)
@@ -8,22 +7,40 @@ st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
 
 
 class Dashboard:
-    def __init__(self, excel_file_path, pickle_file_path):
-        # Initialize DataHandler
-        self.data_handler = DataHandler(excel_file_path, pickle_file_path)
-        self.df = self.data_handler.raw_data  # Load data
-
-        if self.df is None:
-            st.error("Failed to load data.")
-            return
-
+    def __init__(self, pickle_file_path=None, excel_file_path=None):
+        """
+        Initialize the Dashboard class using data retrieval either from Excel or Pickle file.
+        """
+        self.data_retrieval = DataRetrieval(pickle_file_path=pickle_file_path, excel_file_path=excel_file_path)
+        self.df = self.data_retrieval.raw_data  # Loaded data from Excel or Pickle file
+        self.df = self.process_data(self.df)  # Process the data (e.g., handle missing values)
         self.visualization = DataVisualization(self.df)  # Initialize visualization
 
+    def process_data(self, df):
+        """ Process the data (this is just an example) """
+        if df is not None:
+            print("Missing values in the data:", df.isnull().sum())
+
+            # Avoid inplace=True and explicitly assign the filled column back to the DataFrame
+            df['Name'] = df['Name'].fillna('Unknown')
+
+            print("Updated data:")
+            print(df.head())
+        return df
+
     def auto_detect_frequency(self, df):
-        """Detect the dataset's frequency based on time gaps."""
-        return self.data_handler.auto_detect_frequency()  # Use the method from DataHandler
+        """ Detect the dataset's frequency based on time gaps. """
+        if "TIME_PERIOD" in df.columns:
+            df["TIME_PERIOD"] = pd.to_datetime(df["TIME_PERIOD"])
+            time_diff = df["TIME_PERIOD"].diff().mode()[0]
+            if time_diff.days in [90, 91, 92]:  # Quarterly
+                return "quarterly"
+            elif time_diff.days in [30, 31]:  # Monthly
+                return "monthly"
+        return None
 
     def run(self):
+        st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
         st.markdown("<h1 style='text-align: center;'>📊 Uncompromised Research Dashboard</h1>", unsafe_allow_html=True)
 
         # Select dataset
@@ -36,7 +53,9 @@ class Dashboard:
         compare_quarters = st.sidebar.checkbox("Compare Specific Quarters Across Years")
 
         if selected_name:
+            # Filter the data based on the selected dataset
             selected_data = self.df[self.df['Name'] == selected_name]
+
             if selected_data.empty:
                 st.error(f"No data found for the selected dataset: {selected_name}")
                 return
@@ -91,10 +110,8 @@ class Dashboard:
 if __name__ == "__main__":
     st.write("🚀 App started!")
 
-    # Define file paths
-    excel_path = "data/DATA_FOR_ECB.xlsx"
-    pickle_path = "data/DATA_FOR_ECB.pkl"
+    # Provide the path to the Pickle file
+    pickle_file_path = r"data_for_ecb.pkl"  # Path to your Pickle file
 
-    dashboard = Dashboard(excel_path, pickle_path)
-    dashboard.run()
+    dashboard = Dashboard(pickle_file_path)
 
