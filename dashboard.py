@@ -3,8 +3,10 @@ import pandas as pd
 from data_retrieval import DataRetrieval
 from data_visualization import DataVisualization
 
+
 # Set page config at the top of the script (must be the first command)
 st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
+
 
 class Dashboard:
     def __init__(self, excel_file_path):
