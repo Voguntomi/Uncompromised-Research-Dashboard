@@ -30,8 +30,11 @@ class DataRetrieval:
         return {}
 
     def get_key_from_name(self, dataset_name):
-        """Return the key(s) associated with a dataset name."""
-        return [key for key, name in self.key_name_mapping.items() if name == dataset_name]
+        """Return the key associated with a dataset name. Handle cases where multiple keys exist."""
+        keys = [key for key, name in self.key_name_mapping.items() if name == dataset_name]
+        if keys:
+            return keys[0]  # Return the first key, or modify if you need another logic
+        return None  # Return None if no key is found
 
     def fetch_data(self, key):
         """Fetch the data associated with the specified key."""
@@ -43,3 +46,4 @@ class DataRetrieval:
             self.DICT_data[key] = raw_data.get(key)
             return self.DICT_data[key]
         return None
+
