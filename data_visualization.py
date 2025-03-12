@@ -1,96 +1,88 @@
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import pandas as pd
+import plotly.express as px
 
 
 class DataVisualization:
-    def __init__(self, data_dict):
-        """
-        Initialize with the data dictionary, which contains the processed data.
-        """
-        self.data_dict = data_dict
+    def __init__(self, df_dict):
+        self.df_dict = df_dict
 
-    def line_chart(self, data_df, y_column="OBS_VALUE", title="Line Chart"):
-        """
-        Create a line chart for the given DataFrame and y_column.
-        """
-        if "TIME_PERIOD" not in data_df.columns or y_column not in data_df.columns:
-            raise ValueError("Data must include 'TIME_PERIOD' and the specified y_column for line chart.")
+    def compare_datasets_chart(self, combined_data, view_option, chart_title):
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=data_df["TIME_PERIOD"], y=data_df[y_column], mode="lines", name=y_column))
+
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#8064a2']
+
+        for idx, (dataset_name, data_df) in enumerate(combined_data):
+            data_df = pd.DataFrame(data_df).sort_values(by="TIME_PERIOD")
+            data_df.set_index("TIME_PERIOD", inplace=True)
+
+            axis = 'y1' if idx == 0 else 'y2'
+
+            if view_option == "Original Data":
+                fig.add_trace(go.Scatter(
+                    x=data_df.index,
+                    y=data_df["OBS_VALUE"],
+                    mode='lines+markers',
+                    name=dataset_name,
+                    line=dict(color=colors[idx % len(colors)], width=2),
+                    opacity=0.8,
+                    yaxis=axis
+                ))
+
+            elif view_option == "Period-on-Period":
+                data_df["OBS_VALUE"] = data_df["OBS_VALUE"].diff()
+                fig.add_trace(go.Scatter(
+                    x=data_df.index,
+                    y=data_df["OBS_VALUE"],
+                    mode='lines',
+                    name=dataset_name,
+                    line=dict(color=colors[idx % len(colors)], width=2),
+                    opacity=0.8,
+                    yaxis=axis
+                ))
+
+            elif view_option == "Interannual":
+                data_df["OBS_VALUE"] = data_df["OBS_VALUE"].pct_change(periods=4) * 100
+                fig.add_trace(go.Scatter(
+                    x=data_df.index,
+                    y=data_df["OBS_VALUE"],
+                    mode='lines+markers',
+                    name=dataset_name,
+                    line=dict(color=colors[idx % len(colors)], width=2),
+                    opacity=0.8,
+                    yaxis=axis
+                ))
+
         fig.update_layout(
-            template="plotly_white",
-            title=title,
+            title=chart_title,
             xaxis_title="Time Period",
-            yaxis_title=y_column
+            yaxis=dict(title="Primary Axis", side='left', showgrid=True, gridcolor='lightgray'),
+            yaxis2=dict(title="Secondary Axis", overlaying='y', side='right', showgrid=False, visible=True),
+            legend=dict(x=0.5, y=-0.2, orientation='h', xanchor='center'),
+            margin=dict(l=40, r=40, t=60, b=40),
+            plot_bgcolor='#F3F3F3',
+            font=dict(size=14),
+            barmode='group'
         )
-        return fig
 
-    def period_on_period_chart(self, data_df, title="Period-on-Period Change"):
-        """
-        Create a period-on-period comparison chart.
-        """
-        if "Variance" not in data_df.columns:
-            data_df["Variance"] = data_df["OBS_VALUE"].pct_change(periods=1) * 100
-
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-        fig.add_trace(
-            go.Bar(x=data_df["TIME_PERIOD"], y=data_df["OBS_VALUE"], name="Previous Year", marker_color="blue"),
-            secondary_y=False
-        )
-        fig.add_trace(
-            go.Scatter(x=data_df["TIME_PERIOD"], y=data_df["Variance"], mode="lines+markers", name="Variance",
-                       marker_color="magenta"),
-            secondary_y=True
-        )
-        fig.update_layout(
-            title=title,
-            xaxis_title="Time Period",
-            yaxis_title="OBS_VALUE",
-        )
-        return fig
-
-    def interannual_chart(self, data_df, title="Interannual Change"):
-        """
-        Create an interannual change chart, comparing different years for the same time periods.
-        """
-        if "Year" not in data_df.columns:
-            data_df["Year"] = data_df["TIME_PERIOD"].dt.year  # Add Year column if not present
-
-        pivot_df = data_df.pivot(index="TIME_PERIOD", columns="Year", values="OBS_VALUE")
-        fig = go.Figure()
-        for col in pivot_df.columns:
-            fig.add_trace(go.Bar(x=pivot_df.index, y=pivot_df[col], name=f"Year {col}"))
-        fig.update_layout(
-            barmode="group",
-            title=title,
-            xaxis_title="Time Period",
-            yaxis_title="OBS_VALUE"
-        )
         return fig
 
     def quarterly_comparison_chart(self, data_df, selected_quarters):
-        """
-        Create a chart comparing data for specific quarters.
-        """
-        data_df["Quarter"] = data_df["TIME_PERIOD"].dt.to_period("Q").astype(str)
+        # Ensure data_df is a DataFrame
+        if not isinstance(data_df, pd.DataFrame):
+            raise TypeError("Expected data_df to be a DataFrame, but got {}".format(type(data_df)))
 
-        # Only filter for selected quarters
-        pivot_df = data_df.pivot(index="Quarter", columns="Year", values="OBS_VALUE")
-        pivot_df = pivot_df.loc[
-            pivot_df.index.str.endswith(tuple(selected_quarters))]  # Filter based on selected quarters
+        # Correct datetime conversion
+        data_df["TIME_PERIOD"] = pd.to_datetime(data_df["TIME_PERIOD"], errors='coerce')
+        data_df.set_index("TIME_PERIOD", inplace=True)
 
-        if pivot_df.empty:
-            raise ValueError("No data available for the selected quarters.")
+        # Filter data for selected quarters
+        quarter_data = data_df[data_df.index.quarter.isin([int(q[1]) for q in selected_quarters])]
 
-        fig = go.Figure()
-        for col in pivot_df.columns:
-            fig.add_trace(go.Bar(x=pivot_df.index, y=pivot_df[col], name=f"Year {col}"))
-        fig.update_layout(
-            barmode="group",
-            title="Quarterly Comparison",
-            xaxis_title="Quarter",
-            yaxis_title="OBS_VALUE"
-        )
+        # Visualization
+        fig = px.bar(quarter_data, x=quarter_data.index, y='OBS_VALUE', title='Quarterly Data')
         return fig
+
+
+
 
