@@ -56,8 +56,8 @@ class DataVisualization:
         fig.update_layout(
             title=chart_title,
             xaxis_title="Time Period",
-            yaxis=dict(title="Primary Axis", side='left', showgrid=True, gridcolor='lightgray'),
-            yaxis2=dict(title="Secondary Axis", overlaying='y', side='right', showgrid=False, visible=True),
+            yaxis=dict(title="OBS VALUE", side='left', showgrid=True, gridcolor='lightgray'),
+            yaxis2=dict(title="OBS VALUE", overlaying='y', side='right', showgrid=False, visible=True),
             legend=dict(x=0.5, y=-0.2, orientation='h', xanchor='center'),
             margin=dict(l=40, r=40, t=60, b=40),
             plot_bgcolor='#F3F3F3',
