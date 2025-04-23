@@ -1,55 +1,92 @@
 import streamlit as st
 import pandas as pd
 from data_retrieval import DataRetrieval
-from data_manipulation import DataManipulation
 from data_visualization import DataVisualization
 import plotly.graph_objects as go
-import plotly.express as px
 
 
 class Dashboard:
     def __init__(self, pickle_file_path):
-        self.pickle_file_path = pickle_file_path
         self.data_retrieval = DataRetrieval(pickle_file_path)
-        self.df_dict = self.data_retrieval.raw_data
-        self.visualization = DataVisualization(self.df_dict)
+        self.raw_df = self.data_retrieval.raw_data
+        self.visualization = DataVisualization(self.data_retrieval.DICT_data)
 
-    def auto_detect_frequency(self, df):
-        """Detect the dataset's frequency based on time gaps."""
-        if "TIME_PERIOD" in df.columns:
-            df["TIME_PERIOD"] = pd.to_datetime(df["TIME_PERIOD"], errors='coerce')
-            df.dropna(subset=["TIME_PERIOD"], inplace=True)
-            time_diff = df["TIME_PERIOD"].diff().mode()[0]
-            if time_diff.days in [90, 91, 92]:
-                return "quarterly"
-            elif time_diff.days in [30, 31]:
-                return "monthly"
+        self.series_name_map = {}  # Maps unique title → key
+        self.series_key_map = {}   # Maps key → unique title
+        self.failed_keys = []      # Track failed keys
+
+        self.build_series_name_map()
+
+    def build_series_name_map(self):
+        self.failed_keys = []  # Reset failed list
+        total_keys = list(self.raw_df["KEY"].dropna().unique())
+
+        print(f"\n🔎 Attempting to fetch {len(total_keys)} ECB keys...\n")
+
+        for idx, key in enumerate(total_keys, start=1):
+            try:
+                print(f"[{idx}/{len(total_keys)}] 🔄 Fetching: {key}")
+                self.data_retrieval.fetch_data(key)
+                df = self.data_retrieval.DICT_data.get(key)
+
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    title = self.get_title_from_data(df)
+                    unique_title = f"{title} [{key}]"
+                    self.series_name_map[unique_title] = key
+                    self.series_key_map[key] = unique_title
+                    print(f"✅ Success: {key} → {unique_title}\n")
+                else:
+                    print(f"⚠️ Skipped (no data): {key}\n")
+                    self.failed_keys.append(key)
+
+            except Exception as e:
+                print(f"❌ Error fetching {key}: {e}\n")
+                self.failed_keys.append(key)
+
+        if self.failed_keys:
+            print("🚫 The following keys failed to fetch or returned no data:\n")
+            for key in self.failed_keys:
+                print(f" - {key}")
+        else:
+            print("✅ All keys fetched successfully.")
+
+    def get_title_from_data(self, df):
+        for col in ["TITLE", "TITLE_COMPL", "TITLE_EN", "Series_title"]:
+            if col in df.columns:
+                val = df[col].dropna().unique()
+                if len(val) > 0:
+                    return val[0]
+        return "Unnamed Series"
+
+    def get_unit_from_data(self, df):
+        for col in ["UNIT", "UNIT_MEASURE", "UNIT_MULT", "UNIT_DESCR"]:
+            if col in df.columns:
+                val = df[col].dropna().unique()
+                if len(val) > 0:
+                    return val[0]
         return None
 
     def run(self):
         st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
         st.markdown("<h1 style='text-align: center;'>📊 Uncompromised Research Dashboard</h1>", unsafe_allow_html=True)
 
-        dataset_names = [name for name in self.data_retrieval.key_name_mapping.values() if name]
+        dataset_names = list(self.series_name_map.keys())
 
-        selected_dataset = st.sidebar.selectbox("Select Dataset:", options=dataset_names, key="single_selection")
-        selected_datasets = st.sidebar.multiselect("Compare with Additional Datasets:", options=dataset_names,
-                                                   key="multi_selection")
+        selected_name = st.sidebar.selectbox("Select Dataset:", options=dataset_names)
+        selected_comparisons = st.sidebar.multiselect("Compare with Additional Datasets:", options=dataset_names)
 
         time_range = st.sidebar.date_input("Select Time Range:", [])
-        view_option = st.sidebar.radio("View Option:", ["Original Data", "Period-on-Period", "Interannual"],
-                                       key="view_option")
+        view_option = st.sidebar.radio("View Option:", ["Original Data", "Period-on-Period", "Interannual"])
 
-        compare_quarters = st.sidebar.checkbox("Compare Specific Quarters Across Years")
-        selected_quarters = []
-        if compare_quarters:
-            selected_quarters = st.sidebar.multiselect("Select Quarters:", options=["Q1", "Q2", "Q3", "Q4"],
-                                                       key="quarter_selection")
+        sub_option = None
+        if view_option != "Original Data":
+            sub_option = st.sidebar.selectbox("Select Sub Option:", ["Difference", "Rate of Change"])
 
         combined_data = []
 
-        def filter_data(selected_key, data_df):
-            """Filter data based on date range."""
+        def filter_data(data_df):
+            if "TIME_PERIOD" not in data_df.columns:
+                return pd.DataFrame()
             data_df["TIME_PERIOD"] = pd.to_datetime(data_df["TIME_PERIOD"], errors='coerce')
             data_df.dropna(subset=["TIME_PERIOD"], inplace=True)
             if time_range:
@@ -57,44 +94,50 @@ class Dashboard:
                                   (data_df["TIME_PERIOD"] <= pd.to_datetime(time_range[1]))]
             return data_df
 
-        if selected_dataset:
-            selected_key = self.data_retrieval.get_key_from_name(selected_dataset)
-            self.data_retrieval.fetch_data(selected_key)
-            data_df = self.data_retrieval.DICT_data.get(selected_key, pd.DataFrame())
-            if not data_df.empty:
-                combined_data.append((selected_dataset, filter_data(selected_key, data_df)))
+        selected_key = self.series_name_map.get(selected_name)
+        unit = None
+        y_axis_label = "Value"
+        x_axis_label = "Date"
 
-        for dataset_name in selected_datasets:
-            selected_key = self.data_retrieval.get_key_from_name(dataset_name)
-            if selected_key not in self.data_retrieval.DICT_data:
-                self.data_retrieval.fetch_data(selected_key)
-            data_df = self.data_retrieval.DICT_data.get(selected_key, pd.DataFrame())
-            if not data_df.empty:
-                combined_data.append((dataset_name, filter_data(selected_key, data_df)))
+        if selected_key:
+            df = self.data_retrieval.DICT_data.get(selected_key)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                label = selected_name
+                unit = self.get_unit_from_data(df)
+                if unit:
+                    y_axis_label = unit
+                combined_data.append((label, filter_data(df)))
+
+        for name in selected_comparisons:
+            key = self.series_name_map.get(name)
+            if key:
+                df = self.data_retrieval.DICT_data.get(key)
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    label = name
+                    combined_data.append((label, filter_data(df)))
 
         if combined_data:
-            chart_title = selected_dataset if len(combined_data) == 1 else "Comparison of Selected Datasets"
-            combined_chart = self.visualization.compare_datasets_chart(combined_data, view_option, chart_title)
+            chart_title = selected_name
+            combined_chart, table_data = self.visualization.compare_datasets_chart(
+                combined_data, view_option, chart_title, sub_option,
+                y_axis_label=y_axis_label, x_axis_label=x_axis_label
+            )
+
             if isinstance(combined_chart, go.Figure):
                 st.plotly_chart(combined_chart)
+
+                for label, df in table_data:
+                    st.markdown(f"#### {label} Data Table")
+                    st.dataframe(df)
             else:
-                st.warning("No valid data available for chart generation.")
-
-            for dataset_name, data_df in combined_data:
-                st.markdown(f"### {dataset_name} Data Table")
-                st.dataframe(data_df)
-
-            if compare_quarters:
-                for dataset_name, data_df in combined_data:
-                    quarter_data = data_df.copy()
-                    quarter_data['Quarter_Year'] = quarter_data['TIME_PERIOD'].dt.to_period('Q').astype(str)
-                    filtered_quarter_data = quarter_data[quarter_data['Quarter_Year'].str[-2:].isin(selected_quarters)]
-                    fig = px.bar(filtered_quarter_data, x='Quarter_Year', y='OBS_VALUE', color='Quarter_Year',
-                                 title=f"Quarterly Comparison for {dataset_name}")
-                    st.plotly_chart(fig)
+                st.warning("⚠️ No valid data available for chart generation.")
+        else:
+            st.info("ℹ️ Please select a dataset that contains valid data.")
 
 
 if __name__ == "__main__":
-    data_file_path = "data_for_ecb.pkl"
-    dashboard = Dashboard(pickle_file_path=data_file_path)
+    data_file_path = "ecb_dashboard_data.pkl"
+    dashboard = Dashboard(data_file_path)
     dashboard.run()
+
+
