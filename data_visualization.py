@@ -2,7 +2,6 @@ import plotly.graph_objects as go
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 import streamlit as st
-import io
 
 
 class DataVisualization:
@@ -22,7 +21,46 @@ class DataVisualization:
                 return None
         return None
 
-    def compare_datasets_chart(self, combined_data, view_option, chart_title, sub_option=None, y_axis_label="Value", x_axis_label="Date"):
+    @staticmethod
+    def describe_metadata(df, dataset_name):
+        lines = [f"**{dataset_name}**"]
+
+        if df is not None and isinstance(df, pd.DataFrame):
+            df = df.copy()
+            df.dropna(axis=1, how="all", inplace=True)
+
+            def get_unique(colname):
+                if colname in df.columns:
+                    vals = df[colname].dropna().unique()
+                    if len(vals) > 0:
+                        return vals[0]
+                return "Not available"
+
+            metadata_fields = {
+                "Complete Title": get_unique("TITLE_COMPL"),
+                "Title (EN)": get_unique("TITLE_EN"),
+                "Title (Original)": get_unique("TITLE"),
+                "Frequency": get_unique("FREQ"),
+                "Reference Area": get_unique("REF_AREA"),
+                "Adjustment": get_unique("SEASONAL_ADJUST_DESC") or get_unique("SEASONAL_ADJUST"),
+                "Unit of Measure": get_unique("UNIT") or get_unique("UNIT_DESCR"),
+                "Source": get_unique("SOURCE") if "SOURCE" in df.columns else None,
+                "Observation Status": get_unique("OBS_STATUS_DESC") or get_unique("OBS_STATUS"),
+            }
+
+            for label, value in metadata_fields.items():
+                if value and value != "Not available":
+                    lines.append(f"- **{label}:** {value}")
+
+        else:
+            lines.append("_No metadata available._")
+
+        return "\n".join(lines)
+
+    def compare_datasets_chart(
+        self, combined_data, view_option, chart_title,
+        sub_option=None, y_axis_label="Value", x_axis_label="Date"
+    ):
         fig = go.Figure()
         table_data = []
 
@@ -30,6 +68,7 @@ class DataVisualization:
         dash_styles = ['solid', 'dash', 'dot', 'dashdot']
 
         for idx, (dataset_name, data_df) in enumerate(combined_data):
+            display_name = dataset_name.split('[')[0].strip()
             data_df = pd.DataFrame(data_df).sort_values(by="TIME_PERIOD")
             data_df.set_index("TIME_PERIOD", inplace=True)
             data_df = data_df.copy()
@@ -37,50 +76,58 @@ class DataVisualization:
             if "OBS_VALUE" not in data_df.columns:
                 continue
 
-            axis = 'y' if idx == 0 else 'y2'
             frequency = self.infer_frequency(data_df.reset_index())
 
             if view_option == "Original Data":
                 y_values = data_df["OBS_VALUE"]
-                trace_name = f"{dataset_name} (Original)"
+                trace_name = f"{display_name} (Original)"
                 table_df = data_df.reset_index()
-                table_label = f"{dataset_name} – Full Dataset"
+                table_label = f"{display_name} – Full Dataset"
+
             elif view_option == "Period-on-Period":
                 if sub_option == "Rate of Change":
                     y_values = data_df["OBS_VALUE"].pct_change() * 100
-                    trace_name = f"{dataset_name} (Period-on-Period % Change)"
+                    trace_name = f"{display_name} (Period-on-Period % Change)"
                     transformation_label = "Period-on-Period % Change"
                 elif sub_option == "Difference":
                     y_values = data_df["OBS_VALUE"].diff()
-                    trace_name = f"{dataset_name} (Period-on-Period Difference)"
+                    trace_name = f"{display_name} (Period-on-Period Difference)"
                     transformation_label = "Period-on-Period Difference"
                 else:
                     continue
-            elif view_option == "Interannual":
-                if frequency not in ["M", "Q"]:
-                    continue
-                periods = 12 if frequency == "M" else 4
-                if sub_option == "Rate of Change":
-                    y_values = data_df["OBS_VALUE"].pct_change(periods=periods) * 100
-                    trace_name = f"{dataset_name} (12-Month % Change)"
-                    transformation_label = "12-Month % Change"
-                elif sub_option == "Difference":
-                    y_values = data_df["OBS_VALUE"].diff(periods=periods)
-                    trace_name = f"{dataset_name} (12-Month Difference)"
-                    transformation_label = "12-Month Difference"
-                else:
-                    continue
-            else:
-                continue
-
-            if view_option != "Original Data":
                 processed_df = pd.DataFrame({
                     "Date": data_df.index.strftime('%Y-%m-%d'),
                     "Index Value": data_df["OBS_VALUE"].values,
                     "Transformed Value": y_values
                 })
                 table_df = processed_df.reset_index(drop=True)
-                table_label = f"{dataset_name} – {transformation_label}"
+                table_label = f"{display_name} – {transformation_label}"
+
+            elif view_option == "Interannual":
+                if frequency not in ["M", "Q"]:
+                    frequency = "M"  # Default fallback
+
+                periods = 12 if frequency == "M" else 4
+                if sub_option == "Rate of Change":
+                    y_values = data_df["OBS_VALUE"].pct_change(periods=periods) * 100
+                    trace_name = f"{display_name} (12-Month % Change)"
+                    transformation_label = "12-Month % Change"
+                elif sub_option == "Difference":
+                    y_values = data_df["OBS_VALUE"].diff(periods=periods)
+                    trace_name = f"{display_name} (12-Month Difference)"
+                    transformation_label = "12-Month Difference"
+                else:
+                    continue
+                processed_df = pd.DataFrame({
+                    "Date": data_df.index.strftime('%Y-%m-%d'),
+                    "Index Value": data_df["OBS_VALUE"].values,
+                    "Transformed Value": y_values
+                })
+                table_df = processed_df.reset_index(drop=True)
+                table_label = f"{display_name} – {transformation_label}"
+
+            else:
+                continue
 
             fig.add_trace(go.Scatter(
                 x=data_df.index,
@@ -96,33 +143,58 @@ class DataVisualization:
                 ),
                 marker=dict(size=7, symbol='circle', line=dict(width=1, color='white')),
                 opacity=0.9,
-                yaxis=axis,
+                yaxis='y',
                 hovertemplate='Time: %{x}<br>Value: %{y:.2f}<extra></extra>'
             ))
 
-            with st.expander(f"Export Table: {dataset_name}"):
-                csv = table_df.to_csv(index=False).encode('utf-8')
-                st.download_button("Download CSV", csv, f"{dataset_name}.csv", "text/csv")
-
-                excel_buffer = io.BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                    table_df.to_excel(writer, index=False)
-                st.download_button("Download Excel", data=excel_buffer.getvalue(), file_name=f"{dataset_name}.xlsx")
-
-            table_data.append((table_label, table_df))
+            table_data.append((table_label, table_df, dataset_name, data_df.reset_index()))
 
         fig.update_layout(
-            height=500,
-            title=dict(text=chart_title, x=0.5, xanchor='center', font=dict(size=20, family="Arial", color="#333")),
-            xaxis=dict(title=x_axis_label, showgrid=True, gridcolor='lightgray', zeroline=False),
-            yaxis=dict(title=y_axis_label, side='left', showgrid=True, gridcolor='lightgray'),
-            yaxis2=dict(title=y_axis_label + " (2)", overlaying='y', side='right', showgrid=False, visible=True),
-            legend=dict(x=0.5, y=-0.2, orientation='h', xanchor='center', font=dict(size=13)),
-            margin=dict(l=60, r=60, t=80, b=80),
+            height=600,
+            title=dict(
+                text=chart_title,
+                x=0.5,
+                xanchor='center',
+                font=dict(size=20, family="Arial", color="#333")
+            ),
+            xaxis=dict(
+                title=x_axis_label,
+                showgrid=True,
+                gridcolor='lightgray',
+                zeroline=False
+            ),
+            yaxis=dict(
+                title=y_axis_label,
+                side='left',
+                showgrid=True,
+                gridcolor='lightgray'
+            ),
+            legend=dict(
+                x=0.5,
+                y=-0.2,
+                orientation='h',
+                xanchor='center',
+                font=dict(size=13)
+            ),
+            margin=dict(l=30, r=30, t=50, b=50),
             plot_bgcolor='#f0f7ff',
             paper_bgcolor='#f0f7ff',
             font=dict(size=14, family="Helvetica", color="#333"),
             hovermode="x unified"
         )
 
+        st.plotly_chart(fig, use_container_width=True, key=f"main_chart_{hash(chart_title)}")
+
+        # ✅ Show dataset metadata
+        for table_label, table_df, dataset_name, raw_df in table_data:
+            with st.expander("ℹ️ View Dataset Description", expanded=False):
+                st.markdown(self.describe_metadata(raw_df, dataset_name))
+
+        # ✅ Show data tables if user requests
+        if st.checkbox("Show Data Tables"):
+            for table_label, table_df, _, _ in table_data:
+                st.markdown(f"#### {table_label}")
+                st.dataframe(table_df, use_container_width=True)
+
         return fig, table_data
+
