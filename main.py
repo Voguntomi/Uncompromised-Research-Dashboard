@@ -1,45 +1,65 @@
+import streamlit as st
 from data_retrieval import DataRetrieval
-from data_manipulation import DataManipulation
 from data_visualization import DataVisualization
 
+# Load data
+data_retriever = DataRetrieval("ecb_dashboard_data.pkl")
+df_dict = data_retriever.DICT_data
 
-class ECBDataProcessor:
-    def __init__(self, pickle_file_path):
-        self.data_retrieval = DataRetrieval(pickle_file_path)
-        self.data_manipulation = None
-        self.data_visualization = None
+# Set up page layout
+st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
+st.markdown("""
+    <div style='margin-top: -60px;'>
+        <h1 style='text-align: center;'>📊 Uncompromised Research Dashboard</h1>
+    </div>
+""", unsafe_allow_html=True)
 
-    def process(self, ST_key):
-        print(f"\n🔄 Processing data for key: {ST_key}")
-        self.data_retrieval.fetch_data(ST_key)
+if not df_dict:
+    st.error("❌ No data loaded from the pickle file.")
+else:
+    # Map cleaned label (without key) to full key
+    label_to_key = {}
+    for full_key in df_dict:
+        clean_label = full_key.split('[')[0].strip()
+        counter = 2
+        original_label = clean_label
+        while clean_label in label_to_key:
+            clean_label = f"{original_label} ({counter})"
+            counter += 1
+        label_to_key[clean_label] = full_key
 
-        if ST_key not in self.data_retrieval.raw_data:
-            print(f"❌ No data retrieved for key {ST_key}. Skipping processing.")
-            return
+    display_labels = list(label_to_key.keys())
 
-        print(f"🔍 Performing data manipulation for key: {ST_key}")
-        self.data_manipulation = DataManipulation(self.data_retrieval.raw_data)
+    if not display_labels:
+        st.warning("⚠️ No valid datasets available.")
+    else:
+        selected_label = st.selectbox("Select Dataset:", display_labels)
+        compare_label = st.selectbox("Compare with Additional Datasets:", ["None"] + display_labels)
 
-        self.data_manipulation.missing_values(ST_key)
-        self.data_manipulation.summary_statistics(ST_key)
-        self.data_manipulation.outlier_detection(ST_key, method='zscore', threshold=3)
-        self.data_manipulation.extract_year_quarter(ST_key)
-        self.data_manipulation.calculate_pct_change(ST_key)
-        self.data_manipulation.calculate_cum_sum(ST_key)
-        self.data_manipulation.seasonal_adj_desc(ST_key)
-        self.data_manipulation.obs_stat_desc(ST_key)
-        self.data_manipulation.indicator_grouping(ST_key)
+        selected_key = label_to_key.get(selected_label)
+        compare_key = label_to_key.get(compare_label) if compare_label != "None" else None
 
-        print(f"📊 Initializing data visualization for key: {ST_key}")
-        self.data_visualization = DataVisualization(self.data_retrieval.raw_data)
+        view_option = st.radio("View Option:", ["Original Data", "Period-on-Period", "Interannual"])
+        sub_option = None
+        if view_option in ["Period-on-Period", "Interannual"]:
+            sub_option = st.selectbox("Select Sub Option:", ["Difference", "Rate of Change"])
 
-        print(f"✅ Processing completed for key: {ST_key}")
+        st.date_input("Select Time Range:", [])
 
+        # Prepare data for visualization
+        combined_data = []
+        if selected_key in df_dict:
+            combined_data.append((selected_key, df_dict[selected_key]))
+        if compare_key and compare_key in df_dict:
+            combined_data.append((compare_key, df_dict[compare_key]))
 
-if __name__ == "__main__":
-    pickle_file_path = "ecb_dashboard_data.pkl"  # Updated path
-    ST_keys = ['Sheet1', 'Sheet2']  # Replace with actual sheet names from your Excel file
-
-    processor = ECBDataProcessor(pickle_file_path)
-    for key in ST_keys:
-        processor.process(key)
+        if combined_data:
+            visualizer = DataVisualization(df_dict)
+            fig, table_data = visualizer.compare_datasets_chart(
+                combined_data=combined_data,
+                view_option=view_option,
+                chart_title=selected_label,  # For display title only
+                sub_option=sub_option
+            )
+        else:
+            st.info("ℹ️ Please select datasets that contain valid data.")

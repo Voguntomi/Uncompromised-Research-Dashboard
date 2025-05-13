@@ -1,8 +1,6 @@
 import plotly.graph_objects as go
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
-import streamlit as st
-
 
 class DataVisualization:
     def __init__(self, df_dict):
@@ -10,21 +8,21 @@ class DataVisualization:
 
     @staticmethod
     def infer_frequency(df):
-        if len(df) < 3:
-            return None
-        df_sorted = df.sort_values("TIME_PERIOD")
-        diffs = pd.Series(df_sorted["TIME_PERIOD"].diff().dropna().values).unique()
-        if len(diffs) == 1:
-            try:
+        if "TIME_PERIOD" not in df.columns or len(df) < 3:
+            return "unknown"
+        try:
+            df_sorted = df.sort_values("TIME_PERIOD")
+            df_sorted["TIME_PERIOD"] = pd.to_datetime(df_sorted["TIME_PERIOD"])
+            diffs = pd.Series(df_sorted["TIME_PERIOD"].diff().dropna().values).unique()
+            if len(diffs) == 1:
                 return to_offset(diffs[0]).name
-            except Exception:
-                return None
-        return None
+        except Exception:
+            return "unknown"
+        return "unknown"
 
     @staticmethod
-    def describe_metadata(df, dataset_name):
-        lines = [f"**{dataset_name}**"]
-
+    def describe_metadata_markdown(df):
+        lines = []
         if df is not None and isinstance(df, pd.DataFrame):
             df = df.copy()
             df.dropna(axis=1, how="all", inplace=True)
@@ -34,7 +32,7 @@ class DataVisualization:
                     vals = df[colname].dropna().unique()
                     if len(vals) > 0:
                         return vals[0]
-                return "Not available"
+                return None
 
             metadata_fields = {
                 "Complete Title": get_unique("TITLE_COMPL"),
@@ -51,150 +49,171 @@ class DataVisualization:
             for label, value in metadata_fields.items():
                 if value and value != "Not available":
                     lines.append(f"- **{label}:** {value}")
-
         else:
             lines.append("_No metadata available._")
 
         return "\n".join(lines)
 
+    @staticmethod
+    def generate_summary_stats(df):
+        if df.empty or "OBS_VALUE" not in df.columns:
+            return pd.DataFrame(columns=["Metric", "Value"])
+
+        stats = {
+            "Min": df["OBS_VALUE"].min(),
+            "Max": df["OBS_VALUE"].max(),
+            "Mean": df["OBS_VALUE"].mean(),
+            "Std Dev": df["OBS_VALUE"].std(),
+            "Latest": df["OBS_VALUE"].iloc[-1],
+            "Count": df["OBS_VALUE"].count(),
+            "Start Date": df.index.min().strftime("%Y-%m-%d"),
+            "End Date": df.index.max().strftime("%Y-%m-%d"),
+        }
+
+        return pd.DataFrame(
+            [(k, str(v)) for k, v in stats.items()],
+            columns=["Metric", "Value"]
+        )
+
+    def assign_colors_and_axes(self, dataset_names, units):
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+        axis_assignments = {}
+        color_map = {}
+
+        for idx, name in enumerate(dataset_names):
+            color_map[name] = colors[idx % len(colors)]
+            axis_assignments[name] = "left" if idx == 0 else "right"
+
+        return color_map, axis_assignments
+
     def compare_datasets_chart(
         self, combined_data, view_option, chart_title,
-        sub_option=None, y_axis_label="Value", x_axis_label="Date"
+        sub_option=None, y_axis_label=None, x_axis_label="Date",
+        chart_height=500, chart_type="line", log_scale=False
     ):
         fig = go.Figure()
         table_data = []
+        units = {}
+        datasets = [name for name, _ in combined_data]
 
-        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
-        dash_styles = ['solid', 'dash', 'dot', 'dashdot']
+        for name, df in combined_data:
+            unit = df["UNIT"].dropna().unique()[0] if "UNIT" in df.columns and not df["UNIT"].dropna().empty else ""
+            units[name] = unit
 
-        for idx, (dataset_name, data_df) in enumerate(combined_data):
-            display_name = dataset_name.split('[')[0].strip()
+        color_map, axis_map = self.assign_colors_and_axes(datasets, units)
+
+        for idx, (original_name, data_df) in enumerate(combined_data):
+            dataset_name = original_name  # for label formatting only
+
             data_df = pd.DataFrame(data_df).sort_values(by="TIME_PERIOD")
+            data_df["TIME_PERIOD"] = pd.to_datetime(data_df["TIME_PERIOD"])
             data_df.set_index("TIME_PERIOD", inplace=True)
             data_df = data_df.copy()
 
             if "OBS_VALUE" not in data_df.columns:
                 continue
 
-            frequency = self.infer_frequency(data_df.reset_index())
+            y_values = data_df["OBS_VALUE"]
 
-            if view_option == "Original Data":
-                y_values = data_df["OBS_VALUE"]
-                trace_name = f"{display_name} (Original)"
-                table_df = data_df.reset_index()
-                table_label = f"{display_name} – Full Dataset"
-
-            elif view_option == "Period-on-Period":
+            if view_option == "Period-on-Period":
                 if sub_option == "Rate of Change":
-                    y_values = data_df["OBS_VALUE"].pct_change() * 100
-                    trace_name = f"{display_name} (Period-on-Period % Change)"
-                    transformation_label = "Period-on-Period % Change"
+                    y_values = y_values.pct_change() * 100
+                    dataset_name += " (% Change)"
                 elif sub_option == "Difference":
-                    y_values = data_df["OBS_VALUE"].diff()
-                    trace_name = f"{display_name} (Period-on-Period Difference)"
-                    transformation_label = "Period-on-Period Difference"
-                else:
-                    continue
-                processed_df = pd.DataFrame({
-                    "Date": data_df.index.strftime('%Y-%m-%d'),
-                    "Index Value": data_df["OBS_VALUE"].values,
-                    "Transformed Value": y_values
-                })
-                table_df = processed_df.reset_index(drop=True)
-                table_label = f"{display_name} – {transformation_label}"
-
+                    y_values = y_values.diff()
+                    dataset_name += " (Diff)"
             elif view_option == "Interannual":
-                if frequency not in ["M", "Q"]:
-                    frequency = "M"  # Default fallback
-
-                periods = 12 if frequency == "M" else 4
+                freq = self.infer_frequency(data_df.reset_index())
+                periods = 12 if freq == "M" else 4 if freq == "Q" else 1
                 if sub_option == "Rate of Change":
-                    y_values = data_df["OBS_VALUE"].pct_change(periods=periods) * 100
-                    trace_name = f"{display_name} (12-Month % Change)"
-                    transformation_label = "12-Month % Change"
+                    y_values = y_values.pct_change(periods=periods) * 100
+                    dataset_name += " (YoY %)"
                 elif sub_option == "Difference":
-                    y_values = data_df["OBS_VALUE"].diff(periods=periods)
-                    trace_name = f"{display_name} (12-Month Difference)"
-                    transformation_label = "12-Month Difference"
-                else:
-                    continue
-                processed_df = pd.DataFrame({
-                    "Date": data_df.index.strftime('%Y-%m-%d'),
-                    "Index Value": data_df["OBS_VALUE"].values,
-                    "Transformed Value": y_values
-                })
-                table_df = processed_df.reset_index(drop=True)
-                table_label = f"{display_name} – {transformation_label}"
+                    y_values = y_values.diff(periods=periods)
+                    dataset_name += " (YoY Diff)"
 
+            data_df["OBS_VALUE"] = y_values
+
+            # Format label
+            if "(" in dataset_name and ")" in dataset_name:
+                main_title = dataset_name.split("(", 1)[0].strip()
+                detail = dataset_name[len(main_title):].strip(" ()")
+                trace_label = f"<b>{main_title}</b><br><span style='font-size:11px; font-weight:normal;'>({detail})</span>"
             else:
-                continue
+                trace_label = f"<b>{dataset_name}</b>"
 
-            fig.add_trace(go.Scatter(
+            # ✅ use original_name for lookups
+            y_axis_side = "y2" if axis_map[original_name] == "right" else "y"
+            color = color_map[original_name]
+
+            trace_args = dict(
                 x=data_df.index,
-                y=y_values,
-                mode='lines+markers',
-                name=trace_name,
-                line=dict(
-                    color=colors[idx % len(colors)],
-                    width=3,
-                    dash=dash_styles[idx % len(dash_styles)],
-                    shape='spline',
-                    smoothing=1.3
-                ),
-                marker=dict(size=7, symbol='circle', line=dict(width=1, color='white')),
-                opacity=0.9,
-                yaxis='y',
-                hovertemplate='Time: %{x}<br>Value: %{y:.2f}<extra></extra>'
-            ))
+                y=data_df["OBS_VALUE"],
+                name=trace_label,
+                marker=dict(color=color),
+                yaxis=y_axis_side
+            )
 
-            table_data.append((table_label, table_df, dataset_name, data_df.reset_index()))
+            if chart_type == "line":
+                fig.add_trace(go.Scatter(mode='lines+markers', **trace_args))
+            elif chart_type == "area":
+                fig.add_trace(go.Scatter(mode='lines', fill='tozeroy', **trace_args))
+            elif chart_type == "bar":
+                fig.add_trace(go.Bar(**trace_args))
+            elif chart_type == "scatter":
+                fig.add_trace(go.Scatter(mode='markers', **trace_args))
+
+            stats_df = self.generate_summary_stats(data_df)
+            table_data.append((dataset_name, data_df.reset_index(), original_name, data_df.reset_index(), stats_df))
+
+        if y_axis_label is None:
+            first_df = combined_data[0][1]
+            if "UNIT" in first_df.columns:
+                unit_col = first_df["UNIT"].dropna().astype(str).str.strip().unique()
+                if len(unit_col) > 0 and unit_col[0]:
+                    y_axis_label = unit_col[0]
+                elif "UNIT_DESCR" in first_df.columns:
+                    unit_col = first_df["UNIT_DESCR"].dropna().astype(str).str.strip().unique()
+                    y_axis_label = unit_col[0] if len(unit_col) > 0 and unit_col[0] else "Value"
+                else:
+                    y_axis_label = "Value"
+            else:
+                y_axis_label = "Value"
+
+        secondary_label = (
+            units[datasets[1]] if len(datasets) > 1 and datasets[1] in units and units[datasets[1]] else "Secondary Axis"
+        )
 
         fig.update_layout(
-            height=600,
             title=dict(
                 text=chart_title,
                 x=0.5,
                 xanchor='center',
-                font=dict(size=20, family="Arial", color="#333")
+                font=dict(size=16)
             ),
-            xaxis=dict(
-                title=x_axis_label,
-                showgrid=True,
-                gridcolor='lightgray',
-                zeroline=False
-            ),
-            yaxis=dict(
-                title=y_axis_label,
-                side='left',
-                showgrid=True,
-                gridcolor='lightgray'
+            height=chart_height,
+            xaxis=dict(title=x_axis_label),
+            yaxis=dict(title=y_axis_label, side="left", showgrid=True),
+            yaxis2=dict(
+                title=secondary_label,
+                overlaying='y',
+                side='right',
+                showgrid=False,
+                showticklabels=True,
+                visible=True
             ),
             legend=dict(
+                orientation="h",
                 x=0.5,
+                xanchor="center",
                 y=-0.2,
-                orientation='h',
-                xanchor='center',
-                font=dict(size=13)
+                title_text="",
+                font=dict(size=11)
             ),
-            margin=dict(l=30, r=30, t=50, b=50),
+            margin=dict(l=30, r=30, t=50, b=60),
+            hovermode="x unified",
             plot_bgcolor='#f0f7ff',
-            paper_bgcolor='#f0f7ff',
-            font=dict(size=14, family="Helvetica", color="#333"),
-            hovermode="x unified"
+            paper_bgcolor='#f0f7ff'
         )
 
-        st.plotly_chart(fig, use_container_width=True, key=f"main_chart_{hash(chart_title)}")
-
-        # ✅ Show dataset metadata
-        for table_label, table_df, dataset_name, raw_df in table_data:
-            with st.expander("ℹ️ View Dataset Description", expanded=False):
-                st.markdown(self.describe_metadata(raw_df, dataset_name))
-
-        # ✅ Show data tables if user requests
-        if st.checkbox("Show Data Tables"):
-            for table_label, table_df, _, _ in table_data:
-                st.markdown(f"#### {table_label}")
-                st.dataframe(table_df, use_container_width=True)
-
-        return fig, table_data
-
+        return fig, table_data, color_map, axis_map
