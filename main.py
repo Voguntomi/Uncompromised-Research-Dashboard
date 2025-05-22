@@ -42,7 +42,7 @@ else:
         view_option = st.radio("View Option:", ["Original Data", "Period-on-Period", "Interannual"])
         sub_option = None
         if view_option in ["Period-on-Period", "Interannual"]:
-            sub_option = st.selectbox("Select Sub Option:", ["Difference", "Rate of Change"])
+            sub_option = st.selectbox("Sub Option:", ["Difference", "Rate of Change"])
 
         st.date_input("Select Time Range:", [])
 
@@ -55,11 +55,42 @@ else:
 
         if combined_data:
             visualizer = DataVisualization(df_dict)
-            fig, table_data = visualizer.compare_datasets_chart(
+            fig, table_data, _, _ = visualizer.compare_datasets_chart(
                 combined_data=combined_data,
                 view_option=view_option,
-                chart_title=selected_label,  # For display title only
+                chart_title=selected_label,
                 sub_option=sub_option
             )
+
+            # Tabs for Chart / Table / Description / Summary Stats
+            tab1, tab2, tab3, tab4 = st.tabs(["📈 Chart", "📊 Table", "📄 Description", "📊 Summary Stats"])
+
+            with tab1:
+                st.plotly_chart(fig, use_container_width=True)
+
+            with tab2:
+                for label, df, orig_key, full_df, stats_df in table_data:
+                    calc_col = "OBS_VALUE"
+                    table_title = f"{label}"
+
+                    if view_option in ["Period-on-Period", "Interannual"]:
+                        df = df[["TIME_PERIOD", calc_col]].dropna()
+                        df.columns = ["Date", table_title]
+                    else:
+                        df = df.dropna(subset=["OBS_VALUE"])
+
+                    st.subheader(f"Data Table - {table_title}")
+                    st.dataframe(df)
+
+                    csv = df.to_csv(index=False).encode("utf-8")
+                    st.download_button(f"Download {label}", data=csv, file_name=f"{label}.csv", mime="text/csv")
+
+            with tab3:
+                st.markdown("📝 Metadata and dataset description coming soon...")
+
+            with tab4:
+                for label, df, orig_key, full_df, stats_df in table_data:
+                    st.subheader(f"Summary Statistics - {label}")
+                    st.dataframe(stats_df)
         else:
             st.info("ℹ️ Please select datasets that contain valid data.")

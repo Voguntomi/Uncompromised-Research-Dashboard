@@ -13,11 +13,16 @@ class DataVisualization:
         try:
             df_sorted = df.sort_values("TIME_PERIOD")
             df_sorted["TIME_PERIOD"] = pd.to_datetime(df_sorted["TIME_PERIOD"])
-            diffs = pd.Series(df_sorted["TIME_PERIOD"].diff().dropna().values).unique()
-            if len(diffs) == 1:
-                return to_offset(diffs[0]).name
+            delta = df_sorted["TIME_PERIOD"].diff().mode()[0]  # Most frequent interval
+            months = delta.days // 30
+            if months == 1:
+                return "M"
+            elif months == 3:
+                return "Q"
+            elif months >= 11:
+                return "A"
         except Exception:
-            return "unknown"
+            pass
         return "unknown"
 
     @staticmethod
@@ -103,7 +108,7 @@ class DataVisualization:
         color_map, axis_map = self.assign_colors_and_axes(datasets, units)
 
         for idx, (original_name, data_df) in enumerate(combined_data):
-            dataset_name = original_name  # for label formatting only
+            dataset_name = original_name
 
             data_df = pd.DataFrame(data_df).sort_values(by="TIME_PERIOD")
             data_df["TIME_PERIOD"] = pd.to_datetime(data_df["TIME_PERIOD"])
@@ -122,6 +127,7 @@ class DataVisualization:
                 elif sub_option == "Difference":
                     y_values = y_values.diff()
                     dataset_name += " (Diff)"
+
             elif view_option == "Interannual":
                 freq = self.infer_frequency(data_df.reset_index())
                 periods = 12 if freq == "M" else 4 if freq == "Q" else 1
@@ -134,7 +140,6 @@ class DataVisualization:
 
             data_df["OBS_VALUE"] = y_values
 
-            # Format label
             if "(" in dataset_name and ")" in dataset_name:
                 main_title = dataset_name.split("(", 1)[0].strip()
                 detail = dataset_name[len(main_title):].strip(" ()")
@@ -142,7 +147,6 @@ class DataVisualization:
             else:
                 trace_label = f"<b>{dataset_name}</b>"
 
-            # ✅ use original_name for lookups
             y_axis_side = "y2" if axis_map[original_name] == "right" else "y"
             color = color_map[original_name]
 
@@ -164,21 +168,35 @@ class DataVisualization:
                 fig.add_trace(go.Scatter(mode='markers', **trace_args))
 
             stats_df = self.generate_summary_stats(data_df)
-            table_data.append((dataset_name, data_df.reset_index(), original_name, data_df.reset_index(), stats_df))
 
+            if view_option in ["Period-on-Period", "Interannual"]:
+                cleaned_df = data_df.reset_index()[["TIME_PERIOD", "OBS_VALUE"]].dropna()
+                value_label = dataset_name.split("<")[0].strip()
+                cleaned_df.columns = ["Date", value_label]
+            else:
+                cleaned_df = data_df.reset_index()
+
+            table_data.append((dataset_name, cleaned_df, original_name, cleaned_df, stats_df))
+
+        # ✅ Updated Y-axis label logic
         if y_axis_label is None:
-            first_df = combined_data[0][1]
-            if "UNIT" in first_df.columns:
-                unit_col = first_df["UNIT"].dropna().astype(str).str.strip().unique()
-                if len(unit_col) > 0 and unit_col[0]:
-                    y_axis_label = unit_col[0]
-                elif "UNIT_DESCR" in first_df.columns:
-                    unit_col = first_df["UNIT_DESCR"].dropna().astype(str).str.strip().unique()
-                    y_axis_label = unit_col[0] if len(unit_col) > 0 and unit_col[0] else "Value"
+            if view_option in ["Period-on-Period", "Interannual"] and sub_option == "Rate of Change":
+                y_axis_label = "% Change"
+            elif view_option in ["Period-on-Period", "Interannual"] and sub_option == "Difference":
+                y_axis_label = "Difference"
+            else:
+                first_df = combined_data[0][1]
+                if "UNIT" in first_df.columns:
+                    unit_col = first_df["UNIT"].dropna().astype(str).str.strip().unique()
+                    if len(unit_col) > 0 and unit_col[0]:
+                        y_axis_label = unit_col[0]
+                    elif "UNIT_DESCR" in first_df.columns:
+                        unit_col = first_df["UNIT_DESCR"].dropna().astype(str).str.strip().unique()
+                        y_axis_label = unit_col[0] if len(unit_col) > 0 and unit_col[0] else "Value"
+                    else:
+                        y_axis_label = "Value"
                 else:
                     y_axis_label = "Value"
-            else:
-                y_axis_label = "Value"
 
         secondary_label = (
             units[datasets[1]] if len(datasets) > 1 and datasets[1] in units and units[datasets[1]] else "Secondary Axis"
