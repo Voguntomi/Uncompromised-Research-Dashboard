@@ -5,3 +5,7 @@ scipy
 plotly
 ecbdata
 openpyxl
+eurostat
+
+
+
