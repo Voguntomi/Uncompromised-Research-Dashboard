@@ -64,7 +64,8 @@ class Dashboard:
         return None
 
     def run(self):
-        st.set_page_config(page_title="Uncompromised Research Dashboard", layout="wide")
+        # ❌ Removed: st.set_page_config(...) — should only exist in main entry script
+
         st.markdown("<div style='text-align: center; font-size: 18px;'>📊 <strong>Uncompromised Research Dashboard</strong></div>", unsafe_allow_html=True)
 
         dataset_names = list(self.series_name_map.keys())
@@ -83,7 +84,6 @@ class Dashboard:
 
         selected_comparisons = st.sidebar.multiselect("Compare with:", dataset_names)
 
-        # ✅ Get date range from dataset
         base_df = self.data_retrieval.DICT_data[selected_key]
         base_df["TIME_PERIOD"] = pd.to_datetime(base_df["TIME_PERIOD"])
         min_date = base_df["TIME_PERIOD"].min()
@@ -163,6 +163,8 @@ class Dashboard:
         else:
             st.warning("No valid data selected.")
 
+
+# Only needed for standalone testing — not required when using as a module
 if __name__ == "__main__":
     dashboard = Dashboard("ecb_dashboard_data.pkl")
     dashboard.run()
